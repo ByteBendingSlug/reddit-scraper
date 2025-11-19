@@ -1,10 +1,14 @@
 # Reddit Scraper Configuration
-# Set your database path here (leave commented to use current directory)
 
-# For Raspberry Pi with SSD:
-# database_path: /mnt/ssd/reddit-data/reddit.db
-
-# For current directory (default):
-# database_path: reddit_data.db
-
+# Database path
 database_path: reddit_data.db
+
+# Subreddits to scrape (one per line)
+subreddits:
+  - python
+  - programming
+  - datascience
+  - MachineLearning
+
+# For Raspberry Pi with SSD, use:
+# database_path: /mnt/ssd/reddit-data/reddit.db

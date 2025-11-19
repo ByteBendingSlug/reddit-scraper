@@ -175,6 +175,29 @@ class SimpleRedditScraper:
 
         return comments
 
+    def scrape_multiple_subreddits(self, subreddits, hours=24):
+        """Scrape posts from multiple subreddits
+
+        Args:
+            subreddits: List of subreddit names
+            hours: Hours to look back for each subreddit
+
+        Returns:
+            Total number of posts scraped
+        """
+        total_posts = 0
+        for i, subreddit in enumerate(subreddits, 1):
+            self.logger.info(f"[{i}/{len(subreddits)}] Scraping r/{subreddit}")
+            try:
+                posts = self.scrape_subreddit(subreddit, hours)
+                total_posts += len(posts)
+            except Exception as e:
+                self.logger.error(f"Failed to scrape r/{subreddit}: {e}")
+                continue
+
+        self.logger.info(f"Total: Scraped {total_posts} posts from {len(subreddits)} subreddits")
+        return total_posts
+
     def scrape_comments_from_db(self, subreddit=None, without_comments=True, hours=None):
         """Scrape comments for posts already in database
 
@@ -228,6 +251,8 @@ def main():
 
     parser = argparse.ArgumentParser(description='Simple Reddit Scraper')
     parser.add_argument('--subreddit', '-s', help='Subreddit to scrape')
+    parser.add_argument('--from-config', action='store_true',
+                       help='Scrape all subreddits from config.yml')
     parser.add_argument('--hours', '-t', type=int, default=24, help='Hours to look back (default: 24)')
     parser.add_argument('--post-url', '-p', help='Specific post URL to scrape')
     parser.add_argument('--scrape-comments', action='store_true',
@@ -275,6 +300,15 @@ def main():
 
         if args.post_url:
             scraper.scrape_post(args.post_url)
+            return 0
+
+        if args.from_config:
+            # Scrape all subreddits from config
+            subreddits = config.get('subreddits', [])
+            if not subreddits:
+                logging.error("No subreddits found in config.yml")
+                return 1
+            scraper.scrape_multiple_subreddits(subreddits, args.hours)
             return 0
 
         if args.subreddit:

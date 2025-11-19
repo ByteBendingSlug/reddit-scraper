@@ -17,27 +17,40 @@ pip install -r requirements.txt
 
 ## Configuration
 
-Edit `config.yml` to set your database path:
+Edit `config.yml`:
 
 ```yaml
-# For Raspberry Pi with SSD:
-database_path: /mnt/ssd/reddit-data/reddit.db
-
-# Or use current directory (default):
+# Database path
 database_path: reddit_data.db
+
+# Subreddits to scrape
+subreddits:
+  - python
+  - programming
+  - datascience
+  - MachineLearning
+
+# For Raspberry Pi with SSD, use:
+# database_path: /mnt/ssd/reddit-data/reddit.db
 ```
 
 ## Usage
 
 ### 1. Scrape Posts (no comments)
 
-Scrape subreddit posts from last 24 hours:
+**Scrape ALL subreddits from config.yml:**
 ```bash
-python simple_scraper.py --subreddit python
+python simple_scraper.py --from-config
 ```
 
-Scrape subreddit posts from last 6 hours:
+**Scrape ALL subreddits from last 6 hours:**
 ```bash
+python simple_scraper.py --from-config --hours 6
+```
+
+**Or scrape single subreddit:**
+```bash
+python simple_scraper.py --subreddit python
 python simple_scraper.py --subreddit python --hours 6
 ```
 
@@ -84,33 +97,30 @@ python simple_scraper.py --subreddit python --db /path/to/custom.db
 ## Cron Job Setup (Raspberry Pi)
 
 **Typical workflow:**
-1. Daily cron: scrape new posts (fast, just metadata)
+1. Daily cron: scrape new posts from all subreddits (fast, just metadata)
 2. Weekly/monthly cron: scrape comments for those posts (slower)
 
 ### Setup:
 
-1. Edit `config.yml` with your database path
+1. Edit `config.yml` with your database path and subreddits list
 2. Add to crontab:
 
 ```bash
 crontab -e
 
-# Scrape new posts daily at 2 AM
-0 2 * * * cd /home/pi/reddit-scraper && /usr/bin/python3 simple_scraper.py --subreddit python --hours 24 >> /tmp/reddit.log 2>&1
+# Scrape all subreddits from config.yml daily at 2 AM
+0 2 * * * cd /home/pi/reddit-scraper && /usr/bin/python3 simple_scraper.py --from-config --hours 24 >> /tmp/reddit.log 2>&1
 
 # Scrape comments weekly on Sunday at 3 AM
-0 3 * * 0 cd /home/pi/reddit-scraper && /usr/bin/python3 simple_scraper.py --scrape-comments --subreddit python >> /tmp/reddit.log 2>&1
+0 3 * * 0 cd /home/pi/reddit-scraper && /usr/bin/python3 simple_scraper.py --scrape-comments >> /tmp/reddit.log 2>&1
 ```
 
-**Or for multiple subreddits:**
-```bash
-# Scrape posts from multiple subreddits daily
-0 2 * * * cd /home/pi/reddit-scraper && /usr/bin/python3 simple_scraper.py --subreddit python --hours 24 >> /tmp/reddit.log 2>&1
-5 2 * * * cd /home/pi/reddit-scraper && /usr/bin/python3 simple_scraper.py --subreddit programming --hours 24 >> /tmp/reddit.log 2>&1
-10 2 * * * cd /home/pi/reddit-scraper && /usr/bin/python3 simple_scraper.py --subreddit datascience --hours 24 >> /tmp/reddit.log 2>&1
+That's it! Just **one line** for all your subreddits.
 
-# Scrape all comments weekly
-0 3 * * 0 cd /home/pi/reddit-scraper && /usr/bin/python3 simple_scraper.py --scrape-comments >> /tmp/reddit.log 2>&1
+**Or scrape specific subreddit:**
+```bash
+# Scrape only python subreddit daily
+0 2 * * * cd /home/pi/reddit-scraper && /usr/bin/python3 simple_scraper.py --subreddit python --hours 24 >> /tmp/reddit.log 2>&1
 ```
 
 ## Database Schema
@@ -123,25 +133,21 @@ crontab -e
 
 **Daily posts + weekly comments:**
 ```bash
-# Day 1: Scrape posts
-python simple_scraper.py --subreddit python --hours 24
-# Result: 50 posts saved (no comments yet)
+# Day 1: Scrape posts from all subreddits in config.yml
+python simple_scraper.py --from-config --hours 24
+# Result: 150 posts saved from 4 subreddits (no comments yet)
 
-# Day 2: Scrape posts
-python simple_scraper.py --subreddit python --hours 24
-# Result: 45 new posts saved (total: 95 posts, no comments)
+# Day 2-6: Scrape posts daily
+python simple_scraper.py --from-config --hours 24
+# Result: ~150 new posts each day
 
 # Day 7: Scrape comments for all posts without comments
-python simple_scraper.py --scrape-comments --subreddit python
-# Result: Comments scraped for all 95 posts
-
-# Day 8: Scrape posts
-python simple_scraper.py --subreddit python --hours 24
-# Result: 52 new posts (total: 147 posts, 95 with comments)
+python simple_scraper.py --scrape-comments
+# Result: Comments scraped for ~900 posts from all subreddits
 
 # Check stats
 python simple_scraper.py --stats
-# Shows: 147 total posts, 95 with comments
+# Shows: 900 total posts, 900 with comments, posts by subreddit
 ```
 
 ## How It Works
