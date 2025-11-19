@@ -94,41 +94,6 @@ python simple_scraper.py --stats
 python simple_scraper.py --subreddit python --db /path/to/custom.db
 ```
 
-## Cron Job Setup (Raspberry Pi)
-
-**Typical workflow:**
-1. Daily cron: scrape new posts from all subreddits (fast, just metadata)
-2. Weekly/monthly cron: scrape comments for those posts (slower)
-
-### Setup:
-
-1. Edit `config.yml` with your database path and subreddits list
-2. Add to crontab:
-
-```bash
-crontab -e
-
-# Scrape all subreddits from config.yml daily at 2 AM
-0 2 * * * cd /home/pi/reddit-scraper && /usr/bin/python3 simple_scraper.py --from-config --hours 24 >> /tmp/reddit.log 2>&1
-
-# Scrape comments weekly on Sunday at 3 AM
-0 3 * * 0 cd /home/pi/reddit-scraper && /usr/bin/python3 simple_scraper.py --scrape-comments >> /tmp/reddit.log 2>&1
-```
-
-That's it! Just **one line** for all your subreddits.
-
-**Or scrape specific subreddit:**
-```bash
-# Scrape only python subreddit daily
-0 2 * * * cd /home/pi/reddit-scraper && /usr/bin/python3 simple_scraper.py --subreddit python --hours 24 >> /tmp/reddit.log 2>&1
-```
-
-## Database Schema
-
-**posts table:** post_id, subreddit, author, title, selftext, url, score, num_comments, created_utc, upvote_ratio, permalink, link_flair_text
-
-**comments table:** comment_id, post_id, parent_id, author, body, score, created_utc, depth
-
 ## Workflow Example
 
 **Daily posts + weekly comments:**
