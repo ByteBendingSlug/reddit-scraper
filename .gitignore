@@ -1,0 +1,36 @@
+# User config (contains personal paths)
+config.local.yml
+
+# Database
+*.db
+*.db-journal
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Output files
+output/
+exports/
+
+# Claude stuff
+.claude/
