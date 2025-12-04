@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  reddit-scraper:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: reddit-scraper
+
+    # Run once and exit (designed for cron job execution)
+    # Same as rss-scraper: no automatic restarts
+    restart: "no"
+
+    volumes:
+      # Database storage on external SSD
+      # Adjust path based on your mount point: /mnt/ssd/ or /data/databases/
+      - /mnt/ssd/reddit-data:/mnt/ssd/reddit-data
+
+      # Config file as read-only
+      # Note: Single file mount (not directory like rss-scraper)
+      - ./config.yml:/app/config.yml:ro
+
+    environment:
+      # Timezone for proper logging timestamps
+      - TZ=Europe/Berlin
+
+      # No MAX_WORKERS needed - reddit-scraper is sequential
+      # (Unlike rss-scraper which uses 5-10 parallel workers)
+
+    deploy:
+      resources:
+        limits:
+          # MUCH lower than rss-scraper (2.0 CPU, 1GB RAM)
+          # Sequential processing requires minimal resources
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          # Conservative baseline for stable operation
+          cpus: '0.25'
+          memory: 128M
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        # Keeps last 3 log files of max 10MB each (30MB total)
+
+# RESOURCE COMPARISON:
+# ┌─────────────────┬──────────────┬─────────────────┐
+# │                 │ RSS Scraper  │ Reddit Scraper  │
+# ├─────────────────┼──────────────┼─────────────────┤
+# │ CPU Limit       │ 2.0 cores    │ 0.5 cores       │
+# │ Memory Limit    │ 1GB          │ 512MB           │
+# │ CPU Reserve     │ 0.5 cores    │ 0.25 cores      │
+# │ Memory Reserve  │ 256MB        │ 128MB           │
+# │ Processing      │ Parallel     │ Sequential      │
+# │ Workers         │ 5-10         │ 1 (implicit)    │
+# └─────────────────┴──────────────┴─────────────────┘
