@@ -89,7 +89,7 @@ class SimpleRedditScraper:
 
                 if post_time < cutoff:
                     found_old = True
-                    continue
+                    break
 
                 post = {
                     'id': post_data.get('id'),

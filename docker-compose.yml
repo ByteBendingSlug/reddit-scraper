@@ -12,9 +12,8 @@ services:
     restart: "no"
 
     volumes:
-      # Database storage on external SSD
-      # Adjust path based on your mount point: /mnt/ssd/ or /data/databases/
-      - /mnt/ssd/reddit-data:/mnt/ssd/reddit-data
+      # Database storage in /opt/data/reddit-scraper
+      - /opt/data/reddit-scraper/data:/app/data
 
       # Config file as read-only
       # Note: Single file mount (not directory like rss-scraper)
