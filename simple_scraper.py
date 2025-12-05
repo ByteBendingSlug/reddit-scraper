@@ -168,9 +168,15 @@ class SimpleRedditScraper:
                 self.db.save_post(post)
                 page_posts += 1
 
+            # Only stop if most of the page is duplicates (>80%)
             if duplicate_count > 0:
-                self.logger.warning(f"Page {page}: Found {duplicate_count} duplicate posts - stopping")
-                break
+                total_items = len(children)
+                duplicate_percentage = (duplicate_count / total_items * 100) if total_items > 0 else 0
+                if duplicate_percentage > 80:
+                    self.logger.warning(f"Page {page}: Found {duplicate_count}/{total_items} duplicate posts ({duplicate_percentage:.0f}%) - stopping")
+                    break
+                else:
+                    self.logger.info(f"Page {page}: Found {duplicate_count} duplicates (continuing)")
 
             self.logger.info(f"Page {page}: Found {page_posts} new posts (total: {len(all_posts)} posts) - Range: {newest_on_page} to {oldest_on_page}")
 
@@ -357,9 +363,15 @@ class SimpleRedditScraper:
                     self.logger.warning(f"Failed to parse post: {e}")
                     continue
 
+            # Only stop if most of the page is duplicates (>80%)
             if duplicate_count > 0:
-                self.logger.warning(f"Page {page}: Found {duplicate_count} duplicate posts - stopping")
-                break
+                total_items = len(posts_found)
+                duplicate_percentage = (duplicate_count / total_items * 100) if total_items > 0 else 0
+                if duplicate_percentage > 80:
+                    self.logger.warning(f"Page {page}: Found {duplicate_count}/{total_items} duplicate posts ({duplicate_percentage:.0f}%) - stopping")
+                    break
+                else:
+                    self.logger.info(f"Page {page}: Found {duplicate_count} duplicates (continuing)")
 
             log_msg = f"Page {page}: Found {page_posts} new posts"
             if skipped_old > 0:
