@@ -52,19 +52,32 @@ class SimpleRedditScraper:
 
         raise Exception(f"Failed after {self.max_retries} attempts")
 
-    def scrape_subreddit(self, subreddit, hours=24):
-        """Scrape posts from subreddit within time range"""
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
-        self.logger.info(f"Scraping r/{subreddit} - last {hours} hours")
-        self.logger.info(f"Cutoff time: {cutoff}")
+    def scrape_subreddit(self, subreddit, hours=24, max_pages=None):
+        """Scrape posts from subreddit within time range or page limit
+
+        Args:
+            subreddit: Subreddit name
+            hours: Hours to look back (default: 24, None = no time limit)
+            max_pages: Maximum pages to fetch (default: None = use time limit, or 50 as safety)
+        """
+        if hours:
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+            self.logger.info(f"Scraping r/{subreddit} - last {hours} hours")
+            self.logger.info(f"Cutoff time: {cutoff}")
+        else:
+            cutoff = None
+            self.logger.info(f"Scraping r/{subreddit} - no time limit")
+
+        if max_pages:
+            self.logger.info(f"Max pages: {max_pages}")
 
         all_posts = []
         after = None
         page = 0
         found_old = False
-        max_pages = 50  # Safety limit to prevent infinite loops
+        page_limit = max_pages if max_pages else 50  # Safety limit to prevent infinite loops
 
-        while page < max_pages:
+        while page < page_limit:
             page += 1
             url = f"https://www.reddit.com/r/{subreddit}/new.json?limit=100"
             if after:
@@ -109,7 +122,8 @@ class SimpleRedditScraper:
                 if newest_on_page is None or post_time > newest_on_page:
                     newest_on_page = post_time
 
-                if post_time < cutoff:
+                # Check time cutoff if specified
+                if cutoff and post_time < cutoff:
                     self.logger.info(f"Found post older than cutoff: {post_time} < {cutoff}")
                     found_old = True
                     break
@@ -142,8 +156,8 @@ class SimpleRedditScraper:
                 self.logger.info("Reached cutoff time, stopping pagination")
                 break
 
-        if page >= max_pages:
-            self.logger.warning(f"Reached max pages limit ({max_pages}), stopping")
+        if page >= page_limit:
+            self.logger.warning(f"Reached max pages limit ({page_limit}), stopping")
 
         self.logger.info(f"Total: {len(all_posts)} posts")
         return all_posts
@@ -207,12 +221,13 @@ class SimpleRedditScraper:
 
         return comments
 
-    def scrape_multiple_subreddits(self, subreddits, hours=24):
+    def scrape_multiple_subreddits(self, subreddits, hours=24, max_pages=None):
         """Scrape posts from multiple subreddits
 
         Args:
             subreddits: List of subreddit names
             hours: Hours to look back for each subreddit
+            max_pages: Maximum pages per subreddit
 
         Returns:
             Total number of posts scraped
@@ -221,7 +236,7 @@ class SimpleRedditScraper:
         for i, subreddit in enumerate(subreddits, 1):
             self.logger.info(f"[{i}/{len(subreddits)}] Scraping r/{subreddit}")
             try:
-                posts = self.scrape_subreddit(subreddit, hours)
+                posts = self.scrape_subreddit(subreddit, hours, max_pages)
                 total_posts += len(posts)
             except Exception as e:
                 self.logger.error(f"Failed to scrape r/{subreddit}: {e}")
@@ -285,7 +300,8 @@ def main():
     parser.add_argument('--subreddit', '-s', help='Subreddit to scrape')
     parser.add_argument('--from-config', action='store_true',
                        help='Scrape all subreddits from config.yml')
-    parser.add_argument('--hours', '-t', type=int, default=24, help='Hours to look back (default: 24)')
+    parser.add_argument('--hours', '-t', type=int, default=24, help='Hours to look back (default: 24, 0 = no time limit)')
+    parser.add_argument('--max-pages', type=int, help='Maximum pages to fetch per subreddit (default: auto)')
     parser.add_argument('--post-url', '-p', help='Specific post URL to scrape')
     parser.add_argument('--scrape-comments', action='store_true',
                        help='Scrape comments for posts already in database')
@@ -341,11 +357,13 @@ def main():
             if not subreddits:
                 logging.error("No subreddits found in config.yml")
                 return 1
-            scraper.scrape_multiple_subreddits(subreddits, args.hours)
+            hours = args.hours if args.hours > 0 else None
+            scraper.scrape_multiple_subreddits(subreddits, hours, args.max_pages)
             return 0
 
         if args.subreddit:
-            scraper.scrape_subreddit(args.subreddit, args.hours)
+            hours = args.hours if args.hours > 0 else None
+            scraper.scrape_subreddit(args.subreddit, hours, args.max_pages)
             return 0
 
         parser.print_help()

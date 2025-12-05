@@ -48,10 +48,16 @@ python simple_scraper.py --from-config
 python simple_scraper.py --from-config --hours 6
 ```
 
+**Scrape with page limit instead of time (max 5 pages per subreddit, ~500 posts):**
+```bash
+python simple_scraper.py --from-config --max-pages 5 --hours 0
+```
+
 **Or scrape single subreddit:**
 ```bash
 python simple_scraper.py --subreddit python
 python simple_scraper.py --subreddit python --hours 6
+python simple_scraper.py --subreddit python --max-pages 3
 ```
 
 ### 2. Scrape Comments for Posts in Database
