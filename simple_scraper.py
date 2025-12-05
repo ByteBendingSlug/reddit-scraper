@@ -56,13 +56,15 @@ class SimpleRedditScraper:
         """Scrape posts from subreddit within time range"""
         cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
         self.logger.info(f"Scraping r/{subreddit} - last {hours} hours")
+        self.logger.info(f"Cutoff time: {cutoff}")
 
         all_posts = []
         after = None
         page = 0
         found_old = False
+        max_pages = 50  # Safety limit to prevent infinite loops
 
-        while True:
+        while page < max_pages:
             page += 1
             url = f"https://www.reddit.com/r/{subreddit}/new.json?limit=100"
             if after:
@@ -78,8 +80,10 @@ class SimpleRedditScraper:
             after = data['data'].get('after')
 
             if not children:
+                self.logger.info("No more posts available")
                 break
 
+            page_posts = 0
             for item in children:
                 if item['kind'] != 't3':
                     continue
@@ -88,6 +92,7 @@ class SimpleRedditScraper:
                 post_time = datetime.fromtimestamp(post_data.get('created_utc', 0), tz=timezone.utc)
 
                 if post_time < cutoff:
+                    self.logger.info(f"Found post older than cutoff: {post_time} < {cutoff}")
                     found_old = True
                     break
 
@@ -107,11 +112,20 @@ class SimpleRedditScraper:
                 }
                 all_posts.append(post)
                 self.db.save_post(post)
+                page_posts += 1
 
-            self.logger.info(f"Page {page}: Found {len([p for p in all_posts if p])} posts")
+            self.logger.info(f"Page {page}: Found {page_posts} new posts (total: {len(all_posts)} posts)")
 
-            if not after or found_old:
+            if not after:
+                self.logger.info("No more pages available (no 'after' token)")
                 break
+
+            if found_old:
+                self.logger.info("Reached cutoff time, stopping pagination")
+                break
+
+        if page >= max_pages:
+            self.logger.warning(f"Reached max pages limit ({max_pages}), stopping")
 
         self.logger.info(f"Total: {len(all_posts)} posts")
         return all_posts
