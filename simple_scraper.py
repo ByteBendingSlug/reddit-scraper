@@ -84,12 +84,17 @@ class SimpleRedditScraper:
                 break
 
             page_posts = 0
+            oldest_on_page = None
             for item in children:
                 if item['kind'] != 't3':
                     continue
 
                 post_data = item['data']
                 post_time = datetime.fromtimestamp(post_data.get('created_utc', 0), tz=timezone.utc)
+
+                # Track oldest post on this page
+                if oldest_on_page is None or post_time < oldest_on_page:
+                    oldest_on_page = post_time
 
                 if post_time < cutoff:
                     self.logger.info(f"Found post older than cutoff: {post_time} < {cutoff}")
@@ -114,7 +119,7 @@ class SimpleRedditScraper:
                 self.db.save_post(post)
                 page_posts += 1
 
-            self.logger.info(f"Page {page}: Found {page_posts} new posts (total: {len(all_posts)} posts)")
+            self.logger.info(f"Page {page}: Found {page_posts} new posts (total: {len(all_posts)} posts) - Oldest: {oldest_on_page}")
 
             if not after:
                 self.logger.info("No more pages available (no 'after' token)")
