@@ -54,6 +54,12 @@ python simple_scraper.py --from-config --hours 6
 python simple_scraper.py --from-config --max-pages 5 --hours 0
 ```
 
+**Ensure minimum posts per subreddit (useful for inactive subreddits):**
+```bash
+python simple_scraper.py --from-config --hours 72 --min-posts 50
+```
+This will scrape the last 72 hours, but if a subreddit has fewer than 50 posts, it will keep going back in time until it reaches 50 posts.
+
 **Or scrape single subreddit:**
 ```bash
 python simple_scraper.py --subreddit python
