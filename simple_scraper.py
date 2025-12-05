@@ -192,13 +192,14 @@ class SimpleRedditScraper:
         self.logger.info(f"Total: {len(all_posts)} posts")
         return all_posts
 
-    def scrape_subreddit_html(self, subreddit, hours=24, max_pages=None):
+    def scrape_subreddit_html(self, subreddit, hours=24, max_pages=None, min_posts=None):
         """Scrape posts from subreddit using HTML parsing (old.reddit.com)
 
         Args:
             subreddit: Subreddit name
             hours: Hours to look back (default: 24, None = no time limit)
             max_pages: Maximum pages to fetch (default: None = use time limit, or 50 as safety)
+            min_posts: Minimum posts to scrape (will ignore time limit until reached, default: None)
         """
         if hours:
             cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
@@ -211,12 +212,16 @@ class SimpleRedditScraper:
         if max_pages:
             self.logger.info(f"Max pages: {max_pages}")
 
+        if min_posts:
+            self.logger.info(f"Minimum posts: {min_posts}")
+
         all_posts = []
         seen_post_ids = set()
         after = None
         page = 0
         page_limit = max_pages if max_pages else 50
         pages_with_no_new_posts = 0  # Track consecutive pages with no new posts
+        ignore_time_cutoff = False  # Set to True if we haven't reached min_posts yet
 
         while page < page_limit:
             page += 1
@@ -284,10 +289,15 @@ class SimpleRedditScraper:
                         newest_on_page = post_time
 
                     # Check time cutoff - but don't break, just skip this post
+                    # If min_posts is set and we haven't reached it, ignore time cutoff
                     if cutoff and post_time < cutoff:
-                        # Skip old posts but continue checking the rest
-                        skipped_old += 1
-                        continue
+                        if min_posts and len(all_posts) < min_posts:
+                            # Still need more posts, ignore time cutoff
+                            pass
+                        else:
+                            # Skip old posts but continue checking the rest
+                            skipped_old += 1
+                            continue
 
                     # Extract other fields
                     title_elem = post_elem.find('a', class_='title')
@@ -364,6 +374,11 @@ class SimpleRedditScraper:
                     break
             else:
                 pages_with_no_new_posts = 0  # Reset counter if we found posts
+
+            # Check if we've reached minimum posts requirement
+            if min_posts and len(all_posts) >= min_posts:
+                self.logger.info(f"Reached minimum posts ({min_posts}), stopping")
+                break
 
             # Find next page button/link
             next_button = soup.find('span', class_='next-button')
@@ -449,7 +464,7 @@ class SimpleRedditScraper:
 
         return comments
 
-    def scrape_multiple_subreddits(self, subreddits, hours=24, max_pages=None, use_html=True):
+    def scrape_multiple_subreddits(self, subreddits, hours=24, max_pages=None, use_html=True, min_posts=None):
         """Scrape posts from multiple subreddits
 
         Args:
@@ -457,6 +472,7 @@ class SimpleRedditScraper:
             hours: Hours to look back for each subreddit
             max_pages: Maximum pages per subreddit
             use_html: Use HTML scraping instead of JSON API (default: True)
+            min_posts: Minimum posts per subreddit (overrides time limit if needed)
 
         Returns:
             Total number of posts scraped
@@ -466,7 +482,7 @@ class SimpleRedditScraper:
             self.logger.info(f"[{i}/{len(subreddits)}] Scraping r/{subreddit}")
             try:
                 if use_html:
-                    posts = self.scrape_subreddit_html(subreddit, hours, max_pages)
+                    posts = self.scrape_subreddit_html(subreddit, hours, max_pages, min_posts)
                 else:
                     posts = self.scrape_subreddit(subreddit, hours, max_pages)
                 total_posts += len(posts)
@@ -534,6 +550,7 @@ def main():
                        help='Scrape all subreddits from config.yml')
     parser.add_argument('--hours', '-t', type=int, default=24, help='Hours to look back (default: 24, 0 = no time limit)')
     parser.add_argument('--max-pages', type=int, help='Maximum pages to fetch per subreddit (default: auto)')
+    parser.add_argument('--min-posts', type=int, help='Minimum posts per subreddit (overrides time limit if needed)')
     parser.add_argument('--use-json', action='store_true',
                        help='Use JSON API instead of HTML scraping (default: HTML)')
     parser.add_argument('--post-url', '-p', help='Specific post URL to scrape')
@@ -593,7 +610,7 @@ def main():
                 return 1
             hours = args.hours if args.hours > 0 else None
             use_html = not args.use_json  # HTML by default
-            scraper.scrape_multiple_subreddits(subreddits, hours, args.max_pages, use_html)
+            scraper.scrape_multiple_subreddits(subreddits, hours, args.max_pages, use_html, args.min_posts)
             return 0
 
         if args.subreddit:
@@ -601,7 +618,7 @@ def main():
             if args.use_json:
                 scraper.scrape_subreddit(args.subreddit, hours, args.max_pages)
             else:
-                scraper.scrape_subreddit_html(args.subreddit, hours, args.max_pages)
+                scraper.scrape_subreddit_html(args.subreddit, hours, args.max_pages, args.min_posts)
             return 0
 
         parser.print_help()
