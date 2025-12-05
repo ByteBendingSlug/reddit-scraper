@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Simple Reddit Scraper - Uses Reddit's JSON API"""
+"""Simple Reddit Scraper - Uses Reddit's HTML pages"""
 import requests
 import time
 import logging
 import os
 import yaml
+import re
 from datetime import datetime, timedelta, timezone
+from bs4 import BeautifulSoup
 from database import Database
 
 
@@ -190,6 +192,199 @@ class SimpleRedditScraper:
         self.logger.info(f"Total: {len(all_posts)} posts")
         return all_posts
 
+    def scrape_subreddit_html(self, subreddit, hours=24, max_pages=None):
+        """Scrape posts from subreddit using HTML parsing (old.reddit.com)
+
+        Args:
+            subreddit: Subreddit name
+            hours: Hours to look back (default: 24, None = no time limit)
+            max_pages: Maximum pages to fetch (default: None = use time limit, or 50 as safety)
+        """
+        if hours:
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+            self.logger.info(f"Scraping r/{subreddit} (HTML) - last {hours} hours")
+            self.logger.info(f"Cutoff time: {cutoff}")
+        else:
+            cutoff = None
+            self.logger.info(f"Scraping r/{subreddit} (HTML) - no time limit")
+
+        if max_pages:
+            self.logger.info(f"Max pages: {max_pages}")
+
+        all_posts = []
+        seen_post_ids = set()
+        after = None
+        page = 0
+        found_old = False
+        page_limit = max_pages if max_pages else 50
+
+        while page < page_limit:
+            page += 1
+
+            # Use old.reddit.com for easier HTML parsing
+            url = f"https://old.reddit.com/r/{subreddit}/new"
+            params = {'limit': 100}
+            if after:
+                params['after'] = after
+
+            try:
+                time.sleep(self.rate_limit)
+                response = requests.get(url, headers=self.headers, params=params, timeout=self.timeout)
+                response.raise_for_status()
+            except Exception as e:
+                self.logger.error(f"Failed to fetch page {page}: {e}")
+                break
+
+            soup = BeautifulSoup(response.text, 'lxml')
+
+            # Find all post containers
+            posts_found = soup.find_all('div', class_='thing', attrs={'data-type': 'link'})
+
+            if not posts_found:
+                self.logger.info("No posts found on page")
+                break
+
+            self.logger.info(f"  HTML page returned {len(posts_found)} posts")
+
+            page_posts = 0
+            duplicate_count = 0
+            oldest_on_page = None
+            newest_on_page = None
+
+            for post_elem in posts_found:
+                try:
+                    post_id = post_elem.get('data-fullname', '').replace('t3_', '')
+                    if not post_id:
+                        continue
+
+                    # Check for duplicates
+                    if post_id in seen_post_ids:
+                        duplicate_count += 1
+                        continue
+
+                    seen_post_ids.add(post_id)
+
+                    # Extract post data from HTML
+                    timestamp_elem = post_elem.find('time')
+                    if timestamp_elem and timestamp_elem.get('datetime'):
+                        post_time = datetime.fromisoformat(timestamp_elem['datetime'].replace('Z', '+00:00'))
+                    else:
+                        # Fallback: try data-timestamp attribute
+                        timestamp = post_elem.get('data-timestamp')
+                        if timestamp:
+                            post_time = datetime.fromtimestamp(int(timestamp) / 1000, tz=timezone.utc)
+                        else:
+                            continue
+
+                    # Track oldest and newest
+                    if oldest_on_page is None or post_time < oldest_on_page:
+                        oldest_on_page = post_time
+                    if newest_on_page is None or post_time > newest_on_page:
+                        newest_on_page = post_time
+
+                    # Check time cutoff
+                    if cutoff and post_time < cutoff:
+                        self.logger.info(f"Found post older than cutoff: {post_time} < {cutoff}")
+                        found_old = True
+                        break
+
+                    # Extract other fields
+                    title_elem = post_elem.find('a', class_='title')
+                    title = title_elem.text.strip() if title_elem else ''
+
+                    author_elem = post_elem.find('a', class_='author')
+                    author = author_elem.text if author_elem else '[deleted]'
+
+                    score_elem = post_elem.find('div', class_='score unvoted')
+                    if not score_elem:
+                        score_elem = post_elem.find('div', class_='score')
+                    score_text = score_elem.text if score_elem else '0'
+                    try:
+                        score = int(score_text.replace(',', ''))
+                    except:
+                        score = 0
+
+                    comments_elem = post_elem.find('a', class_='comments')
+                    num_comments = 0
+                    if comments_elem:
+                        comments_text = comments_elem.text
+                        match = re.search(r'(\d+)', comments_text.replace(',', ''))
+                        if match:
+                            num_comments = int(match.group(1))
+
+                    permalink = post_elem.get('data-permalink', '')
+                    post_url = post_elem.get('data-url', '')
+
+                    # Get selftext if available
+                    expando = post_elem.find('div', class_='expando')
+                    selftext = ''
+                    if expando:
+                        usertext = expando.find('div', class_='usertext-body')
+                        if usertext:
+                            selftext = usertext.get_text(strip=True)
+
+                    post = {
+                        'id': post_id,
+                        'title': title,
+                        'author': author,
+                        'subreddit': subreddit,
+                        'selftext': selftext,
+                        'url': post_url,
+                        'score': score,
+                        'num_comments': num_comments,
+                        'created_utc': post_time,
+                        'permalink': permalink,
+                        'upvote_ratio': None,  # Not available in HTML
+                        'link_flair_text': None  # Could extract if needed
+                    }
+
+                    all_posts.append(post)
+                    self.db.save_post(post)
+                    page_posts += 1
+
+                except Exception as e:
+                    self.logger.warning(f"Failed to parse post: {e}")
+                    continue
+
+            if duplicate_count > 0:
+                self.logger.warning(f"Page {page}: Found {duplicate_count} duplicate posts - stopping")
+                break
+
+            self.logger.info(f"Page {page}: Found {page_posts} new posts (total: {len(all_posts)} posts) - Range: {newest_on_page} to {oldest_on_page}")
+
+            if page_posts == 0:
+                self.logger.info("No new posts on this page, stopping")
+                break
+
+            if found_old:
+                self.logger.info("Reached cutoff time, stopping pagination")
+                break
+
+            # Find next page button/link
+            next_button = soup.find('span', class_='next-button')
+            if next_button:
+                next_link = next_button.find('a')
+                if next_link and next_link.get('href'):
+                    # Extract 'after' parameter from URL
+                    import urllib.parse
+                    parsed = urllib.parse.urlparse(next_link['href'])
+                    query_params = urllib.parse.parse_qs(parsed.query)
+                    after = query_params.get('after', [None])[0]
+                else:
+                    after = None
+            else:
+                after = None
+
+            if not after:
+                self.logger.info("No more pages available (no next button)")
+                break
+
+        if page >= page_limit:
+            self.logger.warning(f"Reached max pages limit ({page_limit}), stopping")
+
+        self.logger.info(f"Total: {len(all_posts)} posts")
+        return all_posts
+
     def scrape_post(self, post_url):
         """Scrape a single post with comments"""
         self.logger.info(f"Scraping post: {post_url}")
@@ -249,13 +444,14 @@ class SimpleRedditScraper:
 
         return comments
 
-    def scrape_multiple_subreddits(self, subreddits, hours=24, max_pages=None):
+    def scrape_multiple_subreddits(self, subreddits, hours=24, max_pages=None, use_html=True):
         """Scrape posts from multiple subreddits
 
         Args:
             subreddits: List of subreddit names
             hours: Hours to look back for each subreddit
             max_pages: Maximum pages per subreddit
+            use_html: Use HTML scraping instead of JSON API (default: True)
 
         Returns:
             Total number of posts scraped
@@ -264,7 +460,10 @@ class SimpleRedditScraper:
         for i, subreddit in enumerate(subreddits, 1):
             self.logger.info(f"[{i}/{len(subreddits)}] Scraping r/{subreddit}")
             try:
-                posts = self.scrape_subreddit(subreddit, hours, max_pages)
+                if use_html:
+                    posts = self.scrape_subreddit_html(subreddit, hours, max_pages)
+                else:
+                    posts = self.scrape_subreddit(subreddit, hours, max_pages)
                 total_posts += len(posts)
             except Exception as e:
                 self.logger.error(f"Failed to scrape r/{subreddit}: {e}")
@@ -330,6 +529,8 @@ def main():
                        help='Scrape all subreddits from config.yml')
     parser.add_argument('--hours', '-t', type=int, default=24, help='Hours to look back (default: 24, 0 = no time limit)')
     parser.add_argument('--max-pages', type=int, help='Maximum pages to fetch per subreddit (default: auto)')
+    parser.add_argument('--use-json', action='store_true',
+                       help='Use JSON API instead of HTML scraping (default: HTML)')
     parser.add_argument('--post-url', '-p', help='Specific post URL to scrape')
     parser.add_argument('--scrape-comments', action='store_true',
                        help='Scrape comments for posts already in database')
@@ -386,12 +587,16 @@ def main():
                 logging.error("No subreddits found in config.yml")
                 return 1
             hours = args.hours if args.hours > 0 else None
-            scraper.scrape_multiple_subreddits(subreddits, hours, args.max_pages)
+            use_html = not args.use_json  # HTML by default
+            scraper.scrape_multiple_subreddits(subreddits, hours, args.max_pages, use_html)
             return 0
 
         if args.subreddit:
             hours = args.hours if args.hours > 0 else None
-            scraper.scrape_subreddit(args.subreddit, hours, args.max_pages)
+            if args.use_json:
+                scraper.scrape_subreddit(args.subreddit, hours, args.max_pages)
+            else:
+                scraper.scrape_subreddit_html(args.subreddit, hours, args.max_pages)
             return 0
 
         parser.print_help()
