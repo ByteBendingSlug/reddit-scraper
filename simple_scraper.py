@@ -12,7 +12,15 @@ from database import Database
 class SimpleRedditScraper:
     def __init__(self, db_path='reddit_data.db'):
         self.logger = logging.getLogger('RedditScraper')
-        self.headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        self.headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Accept-Encoding': 'gzip, deflate',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1'
+        }
         self.rate_limit = 2  # seconds between requests
         self.timeout = 30
         self.max_retries = 3
@@ -93,7 +101,9 @@ class SimpleRedditScraper:
             children = data['data']['children']
             new_after = data['data'].get('after')
 
-            # self.logger.debug(f"  After token: {after} -> {new_after}")
+            # Count items by type
+            post_count = sum(1 for item in children if item['kind'] == 't3')
+            self.logger.info(f"  API returned {len(children)} items ({post_count} posts), after: {after} -> {new_after}")
 
             if not children:
                 self.logger.info("No more posts available")
