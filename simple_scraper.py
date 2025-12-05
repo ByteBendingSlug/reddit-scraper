@@ -72,6 +72,7 @@ class SimpleRedditScraper:
             self.logger.info(f"Max pages: {max_pages}")
 
         all_posts = []
+        seen_post_ids = set()  # Track post IDs to detect duplicates
         after = None
         page = 0
         found_old = False
@@ -106,6 +107,7 @@ class SimpleRedditScraper:
             after = new_after
 
             page_posts = 0
+            duplicate_count = 0
             oldest_on_page = None
             newest_on_page = None
 
@@ -114,7 +116,15 @@ class SimpleRedditScraper:
                     continue
 
                 post_data = item['data']
+                post_id = post_data.get('id')
                 post_time = datetime.fromtimestamp(post_data.get('created_utc', 0), tz=timezone.utc)
+
+                # Check for duplicate posts (indicates we're looping)
+                if post_id in seen_post_ids:
+                    duplicate_count += 1
+                    continue
+
+                seen_post_ids.add(post_id)
 
                 # Track oldest and newest on this page
                 if oldest_on_page is None or post_time < oldest_on_page:
@@ -146,7 +156,15 @@ class SimpleRedditScraper:
                 self.db.save_post(post)
                 page_posts += 1
 
+            if duplicate_count > 0:
+                self.logger.warning(f"Page {page}: Found {duplicate_count} duplicate posts - stopping")
+                break
+
             self.logger.info(f"Page {page}: Found {page_posts} new posts (total: {len(all_posts)} posts) - Range: {newest_on_page} to {oldest_on_page}")
+
+            if page_posts == 0:
+                self.logger.info("No new posts on this page, stopping")
+                break
 
             if not after:
                 self.logger.info("No more pages available (no 'after' token)")
