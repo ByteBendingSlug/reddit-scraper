@@ -215,8 +215,8 @@ class SimpleRedditScraper:
         seen_post_ids = set()
         after = None
         page = 0
-        found_old = False
         page_limit = max_pages if max_pages else 50
+        pages_with_no_new_posts = 0  # Track consecutive pages with no new posts
 
         while page < page_limit:
             page += 1
@@ -248,6 +248,7 @@ class SimpleRedditScraper:
 
             page_posts = 0
             duplicate_count = 0
+            skipped_old = 0
             oldest_on_page = None
             newest_on_page = None
 
@@ -282,11 +283,11 @@ class SimpleRedditScraper:
                     if newest_on_page is None or post_time > newest_on_page:
                         newest_on_page = post_time
 
-                    # Check time cutoff
+                    # Check time cutoff - but don't break, just skip this post
                     if cutoff and post_time < cutoff:
-                        self.logger.info(f"Found post older than cutoff: {post_time} < {cutoff}")
-                        found_old = True
-                        break
+                        # Skip old posts but continue checking the rest
+                        skipped_old += 1
+                        continue
 
                     # Extract other fields
                     title_elem = post_elem.find('a', class_='title')
@@ -350,15 +351,19 @@ class SimpleRedditScraper:
                 self.logger.warning(f"Page {page}: Found {duplicate_count} duplicate posts - stopping")
                 break
 
-            self.logger.info(f"Page {page}: Found {page_posts} new posts (total: {len(all_posts)} posts) - Range: {newest_on_page} to {oldest_on_page}")
+            log_msg = f"Page {page}: Found {page_posts} new posts"
+            if skipped_old > 0:
+                log_msg += f" (skipped {skipped_old} old posts)"
+            log_msg += f" (total: {len(all_posts)} posts) - Range: {newest_on_page} to {oldest_on_page}"
+            self.logger.info(log_msg)
 
             if page_posts == 0:
-                self.logger.info("No new posts on this page, stopping")
-                break
-
-            if found_old:
-                self.logger.info("Reached cutoff time, stopping pagination")
-                break
+                pages_with_no_new_posts += 1
+                if pages_with_no_new_posts >= 2:
+                    self.logger.info("No new posts found on last 2 pages, stopping")
+                    break
+            else:
+                pages_with_no_new_posts = 0  # Reset counter if we found posts
 
             # Find next page button/link
             next_button = soup.find('span', class_='next-button')
