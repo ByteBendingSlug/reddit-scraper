@@ -1,13 +1,14 @@
 # Simple Reddit Scraper
 
-A lightweight Reddit scraper that uses Reddit's public JSON API (no authentication required).
+A lightweight Reddit scraper that parses HTML from old.reddit.com (no authentication required).
 
 ## What It Does
 
-- Scrapes posts from subreddits with time filtering
-- Scrapes individual posts with all comments
+- Scrapes posts from subreddits with time filtering (HTML parsing - more reliable)
+- Scrapes individual posts with all comments (JSON API for comments)
 - Stores data in SQLite database
 - Handles rate limiting and retries automatically
+- Duplicate detection prevents infinite loops
 
 ## Installation
 
@@ -58,6 +59,11 @@ python simple_scraper.py --from-config --max-pages 5 --hours 0
 python simple_scraper.py --subreddit python
 python simple_scraper.py --subreddit python --hours 6
 python simple_scraper.py --subreddit python --max-pages 3
+```
+
+**Use JSON API instead of HTML (less reliable):**
+```bash
+python simple_scraper.py --from-config --use-json
 ```
 
 ### 2. Scrape Comments for Posts in Database
