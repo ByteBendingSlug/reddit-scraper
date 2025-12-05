@@ -60,6 +60,7 @@ class SimpleRedditScraper:
         all_posts = []
         after = None
         page = 0
+        found_old = False
 
         while True:
             page += 1
@@ -79,7 +80,6 @@ class SimpleRedditScraper:
             if not children:
                 break
 
-            found_old = False
             for item in children:
                 if item['kind'] != 't3':
                     continue
