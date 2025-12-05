@@ -77,24 +77,37 @@ class SimpleRedditScraper:
                 break
 
             children = data['data']['children']
-            after = data['data'].get('after')
+            new_after = data['data'].get('after')
+
+            # self.logger.debug(f"  After token: {after} -> {new_after}")
 
             if not children:
                 self.logger.info("No more posts available")
                 break
 
+            # Check if pagination token changed
+            if new_after == after and after is not None:
+                self.logger.warning(f"Pagination token didn't change! Possible Reddit API issue. Stopping.")
+                break
+
+            after = new_after
+
             page_posts = 0
             oldest_on_page = None
-            for item in children:
+            newest_on_page = None
+
+            for i, item in enumerate(children):
                 if item['kind'] != 't3':
                     continue
 
                 post_data = item['data']
                 post_time = datetime.fromtimestamp(post_data.get('created_utc', 0), tz=timezone.utc)
 
-                # Track oldest post on this page
+                # Track oldest and newest on this page
                 if oldest_on_page is None or post_time < oldest_on_page:
                     oldest_on_page = post_time
+                if newest_on_page is None or post_time > newest_on_page:
+                    newest_on_page = post_time
 
                 if post_time < cutoff:
                     self.logger.info(f"Found post older than cutoff: {post_time} < {cutoff}")
@@ -119,7 +132,7 @@ class SimpleRedditScraper:
                 self.db.save_post(post)
                 page_posts += 1
 
-            self.logger.info(f"Page {page}: Found {page_posts} new posts (total: {len(all_posts)} posts) - Oldest: {oldest_on_page}")
+            self.logger.info(f"Page {page}: Found {page_posts} new posts (total: {len(all_posts)} posts) - Range: {newest_on_page} to {oldest_on_page}")
 
             if not after:
                 self.logger.info("No more pages available (no 'after' token)")
@@ -284,8 +297,9 @@ def main():
     args = parser.parse_args()
 
     # Setup logging
+    log_level = logging.DEBUG if '--debug' in args.__dict__.get('__extra', []) else logging.INFO
     logging.basicConfig(
-        level=logging.INFO,
+        level=log_level,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
 
