@@ -5,10 +5,23 @@ database_path: /app/data/reddit_data.db
 
 # Subreddits to scrape (one per line)
 subreddits:
-  - python
-  - programming
-  - datascience
-  - MachineLearning
+  - die_linke
+  - finanzen
+  - kommunismus
+  - de
+  - berlin_public
+  - arbeitsleben
+  - buyfromeu
+  - gekte
+  - tagesschau
+  - eutech
+  - normalverdiener
+  - antiarbeit
+  - nachrichten
+  - grundsicherung
+  - pozilei
+  - kantenhausen
+  - wikifolio
+  - giessen
+  - armes_deutschland
 
-# For Raspberry Pi with SSD, use:
-# database_path: /mnt/ssd/reddit-data/reddit.db
