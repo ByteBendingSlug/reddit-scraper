@@ -195,3 +195,27 @@ class Database:
 
         conn.close()
         return stats
+
+    def get_stats_by_subreddit(self):
+        """Get posts and comments count by subreddit
+
+        Returns:
+            List of tuples: (subreddit, post_count, comment_count)
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT
+                p.subreddit,
+                COUNT(DISTINCT p.post_id) as post_count,
+                COUNT(DISTINCT c.comment_id) as comment_count
+            FROM posts p
+            LEFT JOIN comments c ON p.post_id = c.post_id
+            GROUP BY p.subreddit
+            ORDER BY p.subreddit
+        """)
+
+        results = cursor.fetchall()
+        conn.close()
+        return results

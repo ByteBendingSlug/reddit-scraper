@@ -6,6 +6,7 @@ import logging
 import os
 import yaml
 import re
+import random
 from datetime import datetime, timedelta, timezone
 from bs4 import BeautifulSoup
 from database import Database
@@ -14,8 +15,18 @@ from database import Database
 class SimpleRedditScraper:
     def __init__(self, db_path='reddit_data.db'):
         self.logger = logging.getLogger('RedditScraper')
+
+        # Rotating user agents to avoid detection
+        self.user_agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/120.0.0.0',
+        ]
+
         self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.5',
             'Accept-Encoding': 'gzip, deflate',
@@ -23,14 +34,19 @@ class SimpleRedditScraper:
             'Connection': 'keep-alive',
             'Upgrade-Insecure-Requests': '1'
         }
-        self.rate_limit = 2  # seconds between requests
+        self.rate_limit = 2  # Base seconds between requests (will add random delay)
         self.timeout = 30
         self.max_retries = 3
         self.db = Database(db_path)
 
     def _make_request(self, url):
         """Make request with retry logic"""
-        time.sleep(self.rate_limit)
+        # Rotate user agent for each request
+        self.headers['User-Agent'] = random.choice(self.user_agents)
+
+        # Random delay between requests (2-4 seconds)
+        delay = self.rate_limit + random.uniform(0, 2)
+        time.sleep(delay)
 
         if not url.endswith('.json'):
             url += '.json'
@@ -70,6 +86,9 @@ class SimpleRedditScraper:
             hours: Hours to look back (default: 24, None = no time limit)
             max_pages: Maximum pages to fetch (default: None = use time limit, or 50 as safety)
         """
+        # Normalize subreddit to lowercase
+        subreddit = subreddit.lower()
+
         if hours:
             cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
             self.logger.info(f"Scraping r/{subreddit} - last {hours} hours")
@@ -150,11 +169,20 @@ class SimpleRedditScraper:
                     found_old = True
                     break
 
+                # Skip user profile posts (e.g., u_mediamarktsaturn, u_HORNBACH, etc.)
+                subreddit_name = post_data.get('subreddit', '')
+                if subreddit_name.startswith('u_'):
+                    self.logger.debug(f"Skipping user profile post from {subreddit_name}")
+                    continue
+
+                # Normalize subreddit to lowercase for consistency
+                subreddit_name = subreddit_name.lower()
+
                 post = {
                     'id': post_data.get('id'),
                     'title': post_data.get('title'),
                     'author': post_data.get('author'),
-                    'subreddit': post_data.get('subreddit'),
+                    'subreddit': subreddit_name,
                     'selftext': post_data.get('selftext', ''),
                     'url': post_data.get('url'),
                     'score': post_data.get('score'),
@@ -207,6 +235,9 @@ class SimpleRedditScraper:
             max_pages: Maximum pages to fetch (default: None = use time limit, or 50 as safety)
             min_posts: Minimum posts to scrape (will ignore time limit until reached, default: None)
         """
+        # Normalize subreddit to lowercase
+        subreddit = subreddit.lower()
+
         if hours:
             cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
             self.logger.info(f"Scraping r/{subreddit} (HTML) - last {hours} hours")
@@ -428,7 +459,7 @@ class SimpleRedditScraper:
             'id': post_listing.get('id'),
             'title': post_listing.get('title'),
             'author': post_listing.get('author'),
-            'subreddit': post_listing.get('subreddit'),
+            'subreddit': post_listing.get('subreddit', '').lower(),
             'selftext': post_listing.get('selftext'),
             'url': post_listing.get('url'),
             'score': post_listing.get('score'),
@@ -503,6 +534,7 @@ class SimpleRedditScraper:
                 continue
 
         self.logger.info(f"Total: Scraped {total_posts} posts from {len(subreddits)} subreddits")
+        self._print_stats()
         return total_posts
 
     def scrape_comments_from_db(self, subreddit=None, without_comments=True, hours=None):
@@ -539,7 +571,35 @@ class SimpleRedditScraper:
                 continue
 
         self.logger.info(f"Successfully scraped comments from {success}/{len(posts)} posts")
+        self._print_stats()
         return success
+
+    def _print_stats(self):
+        """Print database statistics by subreddit"""
+        stats = self.db.get_stats_by_subreddit()
+
+        if not stats:
+            return
+
+        # Print header
+        self.logger.info("=" * 70)
+        self.logger.info("DATABASE STATISTICS BY SUBREDDIT")
+        self.logger.info("=" * 70)
+        self.logger.info(f"{'Subreddit':<30} {'Posts':>10} {'Comments':>12}")
+        self.logger.info("-" * 70)
+
+        # Print stats
+        total_posts = 0
+        total_comments = 0
+        for subreddit, post_count, comment_count in stats:
+            self.logger.info(f"{subreddit:<30} {post_count:>10} {comment_count:>12}")
+            total_posts += post_count
+            total_comments += comment_count
+
+        # Print totals
+        self.logger.info("-" * 70)
+        self.logger.info(f"{'TOTAL':<30} {total_posts:>10} {total_comments:>12}")
+        self.logger.info("=" * 70)
 
 
 def load_config():
@@ -577,14 +637,49 @@ def main():
 
     # Setup logging
     log_level = logging.DEBUG if '--debug' in args.__dict__.get('__extra', []) else logging.INFO
-    logging.basicConfig(
-        level=log_level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
 
-    # Get database path: CLI arg > config.yml > default
+    # Get database path to determine log directory
     config = load_config()
     db_path = args.db or config.get('database_path', 'reddit_data.db')
+
+    # Determine log file path
+    # For /app/data/data/reddit_data.db -> log to /app/data/reddit-scraper.log
+    # This matches rss-scraper and news-scraper pattern (log in same dir as db parent)
+    if db_path.startswith('/app/data/'):
+        # Container path - put log in /app/data/ (parent of database directory)
+        log_file = '/app/data/reddit-scraper.log'
+    elif db_path.startswith('/'):
+        # Other absolute path - use parent of database directory
+        log_dir = os.path.dirname(os.path.dirname(db_path))
+        log_file = os.path.join(log_dir, 'reddit-scraper.log')
+    else:
+        # Relative path - log to current directory
+        log_file = 'reddit-scraper.log'
+
+    # Create handlers for both file and console
+    handlers = []
+
+    # File handler
+    try:
+        os.makedirs(os.path.dirname(log_file) if os.path.dirname(log_file) else '.', exist_ok=True)
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setLevel(log_level)
+        file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+        handlers.append(file_handler)
+    except Exception as e:
+        print(f"Warning: Could not create log file {log_file}: {e}")
+
+    # Console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(log_level)
+    console_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    handlers.append(console_handler)
+
+    # Configure root logger
+    logging.basicConfig(
+        level=log_level,
+        handlers=handlers
+    )
 
     try:
         scraper = SimpleRedditScraper(db_path=db_path)

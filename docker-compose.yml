@@ -12,8 +12,8 @@ services:
     restart: "no"
 
     volumes:
-      # Database storage in /opt/data/reddit-scraper
-      - /opt/data/reddit-scraper/data:/app/data
+      # Database and log storage in /opt/data/reddit-scraper
+      - /opt/data/reddit-scraper:/app/data
 
       # Config file as read-only
       # Note: Single file mount (not directory like rss-scraper)

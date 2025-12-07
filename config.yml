@@ -1,7 +1,10 @@
 # Reddit Scraper Configuration
 
 # Database path (stored in mounted volume)
-database_path: /app/data/reddit_data.db
+# /app/data maps to /opt/data/reddit-scraper on host
+# Database: /app/data/data/reddit_data.db -> /opt/data/reddit-scraper/data/reddit_data.db
+# Logs: /app/data/reddit-scraper.log -> /opt/data/reddit-scraper/reddit-scraper.log
+database_path: /app/data/data/reddit_data.db
 
 # Subreddits to scrape (one per line)
 subreddits:
@@ -24,4 +27,12 @@ subreddits:
   - wikifolio
   - giessen
   - armes_deutschland
-
+  - spitzenverdiener
+  - europe
+  - bahn
+  - staiy
+  - geopolitics
+  - politik
+  - shitamericanssay
+  - berlin
+  - germany
