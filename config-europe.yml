@@ -1,0 +1,14 @@
+# Reddit Scraper Configuration - Europe Cluster
+
+# Database path (stored in mounted volume)
+# /app/data maps to /opt/data/reddit-scraper on host
+# Database: /app/data/data/reddit_data_europe.db -> /opt/data/reddit-scraper/data/reddit_data_europe.db
+# Logs: /app/data/reddit-scraper.log -> /opt/data/reddit-scraper/reddit-scraper.log
+database_path: /app/data/data/reddit_data_europe.db
+
+# Subreddits to scrape (one per line)
+subreddits:
+  - europe
+  - germany
+  - buyfromeu
+  - geopolitics

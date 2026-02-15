@@ -45,6 +45,64 @@ services:
         max-file: "3"
         # Keeps last 3 log files of max 10MB each (30MB total)
 
+  reddit-scraper-europe:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: reddit-scraper-europe
+    restart: "no"
+
+    volumes:
+      - /opt/data/reddit-scraper:/app/data
+      - ./config-europe.yml:/app/config.yml:ro
+
+    environment:
+      - TZ=Europe/Berlin
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  reddit-scraper-local:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: reddit-scraper-local
+    restart: "no"
+
+    volumes:
+      - /opt/data/reddit-scraper:/app/data
+      - ./config-local.yml:/app/config.yml:ro
+
+    environment:
+      - TZ=Europe/Berlin
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 # RESOURCE COMPARISON:
 # ┌─────────────────┬──────────────┬─────────────────┐
 # │                 │ RSS Scraper  │ Reddit Scraper  │

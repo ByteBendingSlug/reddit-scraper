@@ -8,31 +8,7 @@ database_path: /app/data/data/reddit_data.db
 
 # Subreddits to scrape (one per line)
 subreddits:
-  - die_linke
   - finanzen
-  - kommunismus
+  - Epstein
   - de
-  - berlin_public
-  - arbeitsleben
-  - buyfromeu
-  - gekte
-  - tagesschau
-  - eutech
-  - normalverdiener
-  - antiarbeit
-  - nachrichten
-  - grundsicherung
-  - pozilei
-  - kantenhausen
-  - wikifolio
-  - giessen
-  - armes_deutschland
-  - spitzenverdiener
-  - europe
-  - bahn
-  - staiy
-  - geopolitics
   - politik
-  - shitamericanssay
-  - berlin
-  - germany
